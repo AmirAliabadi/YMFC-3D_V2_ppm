@@ -1,9 +1,9 @@
-## YMFC-3D_V2_ppm
-# This is a fork of Joop Brokkings amazing YMFC-3D_V2 arduino flight controller
+# YMFC-3D_V2_ppm
+## This is a fork of Joop Brokkings amazing YMFC-3D_V2 arduino flight controller
 
 http://www.brokking.net for more info.
 
-I will be updated with the following changes:
+I will be updating with the following changes:
 * Add PPM input instead of the PWM.  Fewer wires
 * Update to use a center postion throttle.
 
