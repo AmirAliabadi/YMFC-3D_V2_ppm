@@ -102,7 +102,7 @@ void ppmRising() {
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 void setup(){
  
-  Serial.begin(57600);
+  // Serial.begin(57600);
   
   //Read EEPROM for fast access data.
   for(start = 0; start <= 35; start++)eeprom_data[start] = EEPROM.read(start);
@@ -246,7 +246,7 @@ void loop(){
   
       throttle = 1000; // AA for center stick TX setup    
     }
-  }
+  } // AA Ends check to only arm/disarm if the throttle_value (not stick position) is <= 1000us (motors are not running...)
 
   
   //The PID set point in degrees per second is determined by the roll receiver input.
@@ -271,6 +271,7 @@ void loop(){
     if(receiver_input_channel_4 > 1508)pid_yaw_setpoint = (receiver_input_channel_4 - 1508)/3.0;
     else if(receiver_input_channel_4 < 1492)pid_yaw_setpoint = (receiver_input_channel_4 - 1492)/3.0;
   }
+  
   //PID inputs are known. So we can calculate the pid output.
   calculate_pid();
   
@@ -302,10 +303,10 @@ void loop(){
          if( receiver_input_channel_3 < 1050  && throttle > 1400 ) { throttle -= 50; } // AA fast decrease in throttle
     else if( receiver_input_channel_3 < 1200  && throttle > 1010 ) { throttle -= 10; } // AA medium decrease in throttle
     else if( receiver_input_channel_3 < 1400  && throttle > 1001 ) { throttle -= 1;  } // AA slow decrease in throttle   
-    else if( receiver_input_channel_3 > 1600  && throttle < 1800 ) { throttle += 1;  } // AA slow increase in throttle
-    else if( receiver_input_channel_3 > 1800  && throttle < 1800 ) { throttle += 10; } // AA medium increase in throttle   
+    else if( receiver_input_channel_3 > 1600  && throttle < 1999 ) { throttle += 1;  } // AA slow increase in throttle
+    else if( receiver_input_channel_3 > 1800  && throttle < 1990 ) { throttle += 10; } // AA medium increase in throttle   
     else if( receiver_input_channel_3 < 1400 ) { throttle = 1000;  }    
-    Serial.println( throttle );
+    // Serial.println( throttle );
     // hover mode throttle
     // AA
     ///////////////////////////////////////////////////////////////////////////////////////////
