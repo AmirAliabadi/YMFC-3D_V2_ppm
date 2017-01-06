@@ -102,7 +102,7 @@ void ppmRising() {
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 void setup(){
  
-  // Serial.begin(57600);
+  Serial.begin(57600);
   
   //Read EEPROM for fast access data.
   for(start = 0; start <= 35; start++)eeprom_data[start] = EEPROM.read(start);
@@ -147,7 +147,7 @@ void setup(){
   gyro_axis_cal[2] /= 2000;                                    //Divide the pitch total by 2000.
   gyro_axis_cal[3] /= 2000;                                    //Divide the yaw total by 2000.
 
-// AA removing pin change interrupt begin used for PWM input
+// AA removing the pin change interrupt being used for PWM input
 // Original PWM input setup 
 //  PCICR |= (1 << PCIE0);                                       //Set PCIE0 to enable PCMSK0 scan.
 //  PCMSK0 |= (1 << PCINT0);                                     //Set PCINT0 (digital input 8) to trigger an interrupt on state change.
@@ -197,15 +197,10 @@ void loop(){
   receiver_input_channel_2 = convert_receiver_channel(2);      //Convert the actual receiver signals for roll to the standard 1000 - 2000us.
   receiver_input_channel_3 = convert_receiver_channel(3);      //Convert the actual receiver signals for throttle to the standard 1000 - 2000us.
   receiver_input_channel_4 = convert_receiver_channel(4);      //Convert the actual receiver signals for yaw to the standard 1000 - 2000us.
+
 /*
  * AA Debug RX channel inputs
-  Serial.print( receiver_input_channel_1 );
-  Serial.print( " " );
-  Serial.print( receiver_input_channel_2 );
-  Serial.print( " " );
-  Serial.print( receiver_input_channel_3 );
-  Serial.print( " " );
-  Serial.println( receiver_input_channel_4 );
+  Serial.print( receiver_input_channel_1 ); Serial.print( " " ); Serial.print( receiver_input_channel_2 ); Serial.print( " " ); Serial.print( receiver_input_channel_3 ); Serial.print( " " ); Serial.println( receiver_input_channel_4 );
  * AA
 */  
   
@@ -216,9 +211,20 @@ void loop(){
   gyro_pitch_input = (gyro_pitch_input * 0.8) + ((gyro_pitch / 57.14286) * 0.2);         //Gyro pid input is deg/sec.
   gyro_yaw_input = (gyro_yaw_input * 0.8) + ((gyro_yaw / 57.14286) * 0.2);               //Gyro pid input is deg/sec.
 
+  // Serial.print( gyro_roll_input ); Serial.print(" "); Serial.print( gyro_pitch_input ); Serial.print(" "); Serial.println( gyro_yaw_input );  
 
-  // AA
+  // AA only arm/disarm if throttle_value (not stick postion) is <= 1000us (motors are not running...)
   if( throttle <= 1000 ) {
+
+    if( receiver_input_channel_3 > 1900 && receiver_input_channel_4 > 1900 && receiver_input_channel_1 < 1090 && receiver_input_channel_2 < 1090 ) {
+      // enter esc calibration mode
+      // maybe check to see if this state is held for 5 seconds and then go into throttle calibarion mode
+      // if( esc_calibration_mode_enter == 0 ) esc_calibration_mode_enter = millis();
+      // if( millis() - esc_calibration_mode_enter > 5000 ) { in_esc_calibration_mode = 1 ; }
+      //
+      // return; 
+    }
+    
     //For starting the motors: throttle low and yaw left (step 1).
     if(receiver_input_channel_3 < 1050 && receiver_input_channel_4 < 1050 ) {
       start = 1;
@@ -310,8 +316,10 @@ void loop(){
     // hover mode throttle
     // AA
     ///////////////////////////////////////////////////////////////////////////////////////////
-    
+
+    // if( !in_esc_calibration_mode )
     if (throttle > 1800) throttle = 1800;                                   //We need some room to keep full control at full throttle.
+    
     esc_1 = throttle - pid_output_pitch + pid_output_roll - pid_output_yaw; //Calculate the pulse for esc 1 (front-right - CCW)
     esc_2 = throttle + pid_output_pitch + pid_output_roll + pid_output_yaw; //Calculate the pulse for esc 2 (rear-right - CW)
     esc_3 = throttle + pid_output_pitch - pid_output_roll - pid_output_yaw; //Calculate the pulse for esc 3 (rear-left - CCW)
