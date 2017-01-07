@@ -58,11 +58,57 @@ float pid_i_mem_roll, pid_roll_setpoint, gyro_roll_input, pid_output_roll, pid_l
 float pid_i_mem_pitch, pid_pitch_setpoint, gyro_pitch_input, pid_output_pitch, pid_last_pitch_d_error;
 float pid_i_mem_yaw, pid_yaw_setpoint, gyro_yaw_input, pid_output_yaw, pid_last_yaw_d_error;
 
+// AA
+unsigned long esc_calibration_mode_enter = 0 ;
+boolean in_esc_calibration_mode = false;
+// AA
+
+// AA
+////////////////////////////////////////////////////////
+// PPM Input                                          //
+////////////////////////////////////////////////////////
+volatile unsigned long last_ppm_clock = 99999;
+volatile unsigned long current_ppm_clock = 0;
+volatile unsigned long ppm_dt = 0;
+volatile boolean ppm_read = true;
+volatile boolean ppm_sync = false;
+volatile unsigned short ppm_current_channel = 99;
+volatile unsigned long ppm_channels[11] = {0,0,0,0,0,0,0,0,0,0,0}; // at most 10 channels (sync chaneel + 10 = 11)
+#define NUMBER_OF_PPM_CHANNELS 4
+
+void ppmRising() {
+  ppm_read = false;
+    {
+      current_ppm_clock = micros();
+      ppm_dt = current_ppm_clock - last_ppm_clock;
+      if( ppm_dt >= 3500 ) {
+        ppm_sync = true;
+        ppm_current_channel = 0;
+        ppm_channels[ppm_current_channel] = ppm_dt;         
+      }
+      else {
+        if( ppm_sync ) {
+          ppm_current_channel++;
+          if( ppm_current_channel > NUMBER_OF_PPM_CHANNELS ) ppm_sync = false;
+          else ppm_channels[ppm_current_channel] = ppm_dt; 
+        }
+      }
+      last_ppm_clock = current_ppm_clock;   
+    }
+  ppm_read = true;
+}
+///////////////////////////////////////////////////
+// PPM Input                                     //
+///////////////////////////////////////////////////
+// AA
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //Setup routine
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 void setup(){
-  //Serial.begin(57600);
+ 
+  Serial.begin(57600);
+  
   //Read EEPROM for fast access data.
   for(start = 0; start <= 35; start++)eeprom_data[start] = EEPROM.read(start);
   gyro_address = eeprom_data[32];                              //Store the gyro address in the variable.
@@ -105,17 +151,29 @@ void setup(){
   gyro_axis_cal[1] /= 2000;                                    //Divide the roll total by 2000.
   gyro_axis_cal[2] /= 2000;                                    //Divide the pitch total by 2000.
   gyro_axis_cal[3] /= 2000;                                    //Divide the yaw total by 2000.
-  
-  PCICR |= (1 << PCIE0);                                       //Set PCIE0 to enable PCMSK0 scan.
-  PCMSK0 |= (1 << PCINT0);                                     //Set PCINT0 (digital input 8) to trigger an interrupt on state change.
-  PCMSK0 |= (1 << PCINT1);                                     //Set PCINT1 (digital input 9)to trigger an interrupt on state change.
-  PCMSK0 |= (1 << PCINT2);                                     //Set PCINT2 (digital input 10)to trigger an interrupt on state change.
-  PCMSK0 |= (1 << PCINT3);                                     //Set PCINT3 (digital input 11)to trigger an interrupt on state change.
+
+// AA removing the pin change interrupt being used for PWM input
+// Original PWM input setup 
+//  PCICR |= (1 << PCIE0);                                       //Set PCIE0 to enable PCMSK0 scan.
+//  PCMSK0 |= (1 << PCINT0);                                     //Set PCINT0 (digital input 8) to trigger an interrupt on state change.
+//  PCMSK0 |= (1 << PCINT1);                                     //Set PCINT1 (digital input 9)to trigger an interrupt on state change.
+//  PCMSK0 |= (1 << PCINT2);                                     //Set PCINT2 (digital input 10)to trigger an interrupt on state change.
+//  PCMSK0 |= (1 << PCINT3);                                     //Set PCINT3 (digital input 11)to trigger an interrupt on state change.
+// AA
+
+// AA PPM input setup
+  attachInterrupt(digitalPinToInterrupt(3), ppmRising, RISING);  
+// AA PPM   
 
   //Wait until the receiver is active and the throtle is set to the lower position.
   while(receiver_input_channel_3 < 990 || receiver_input_channel_3 > 1020 || receiver_input_channel_4 < 1400){
+
+    // AA lets just read all channels even though we are only checking 2 of them
+    receiver_input_channel_1 = convert_receiver_channel(1);    //Convert the actual receiver signals for throttle to the standard 1000 - 2000us
+    receiver_input_channel_2 = convert_receiver_channel(2);    //Convert the actual receiver signals for yaw to the standard 1000 - 2000us    
     receiver_input_channel_3 = convert_receiver_channel(3);    //Convert the actual receiver signals for throttle to the standard 1000 - 2000us
     receiver_input_channel_4 = convert_receiver_channel(4);    //Convert the actual receiver signals for yaw to the standard 1000 - 2000us
+    
     start ++;                                                  //While waiting increment start whith every loop.
     //We don't want the esc's to be beeping annoyingly. So let's give them a 1000us puls while waiting for the receiver inputs.
     PORTD |= B11110000;                                        //Set digital poort 4, 5, 6 and 7 high.
@@ -126,6 +184,10 @@ void setup(){
       digitalWrite(12, !digitalRead(12));                      //Change the led status.
       start = 0;                                               //Start again at 0.
     }
+    
+    //AA Debug RX channel inputs
+    //Serial.print( receiver_input_channel_1 ); Serial.print( " " ); Serial.print( receiver_input_channel_2 ); Serial.print( " " ); Serial.print( receiver_input_channel_3 ); Serial.print( " " ); Serial.println( receiver_input_channel_4 );
+    
   }
   start = 0;                                                   //Set start back to 0.
   
@@ -149,6 +211,10 @@ void loop(){
   receiver_input_channel_2 = convert_receiver_channel(2);      //Convert the actual receiver signals for roll to the standard 1000 - 2000us.
   receiver_input_channel_3 = convert_receiver_channel(3);      //Convert the actual receiver signals for throttle to the standard 1000 - 2000us.
   receiver_input_channel_4 = convert_receiver_channel(4);      //Convert the actual receiver signals for yaw to the standard 1000 - 2000us.
+
+
+  //AA Debug RX channel inputs
+  //Serial.print( receiver_input_channel_1 ); Serial.print( " " ); Serial.print( receiver_input_channel_2 ); Serial.print( " " ); Serial.print( receiver_input_channel_3 ); Serial.print( " " ); Serial.println( receiver_input_channel_4 );
   
   //Let's get the current gyro data and scale it to degrees per second for the pid calculations.
   gyro_signalen();
@@ -157,21 +223,49 @@ void loop(){
   gyro_pitch_input = (gyro_pitch_input * 0.8) + ((gyro_pitch / 57.14286) * 0.2);         //Gyro pid input is deg/sec.
   gyro_yaw_input = (gyro_yaw_input * 0.8) + ((gyro_yaw / 57.14286) * 0.2);               //Gyro pid input is deg/sec.
 
-  //For starting the motors: throttle low and yaw left (step 1).
-  if(receiver_input_channel_3 < 1050 && receiver_input_channel_4 < 1050)start = 1;
-  //When yaw stick is back in the center position start the motors (step 2).
-  if(start == 1 && receiver_input_channel_3 < 1050 && receiver_input_channel_4 > 1450){
-    start = 2;
-    //Reset the pid controllers for a bumpless start.
-    pid_i_mem_roll = 0;
-    pid_last_roll_d_error = 0;
-    pid_i_mem_pitch = 0;
-    pid_last_pitch_d_error = 0;
-    pid_i_mem_yaw = 0;
-    pid_last_yaw_d_error = 0;
-  }
-  //Stopping the motors: throttle low and yaw right.
-  if(start == 2 && receiver_input_channel_3 < 1050 && receiver_input_channel_4 > 1950)start = 0;
+  // Serial.print( gyro_roll_input ); Serial.print(" "); Serial.print( gyro_pitch_input ); Serial.print(" "); Serial.println( gyro_yaw_input );  
+
+  // AA only arm/disarm if throttle_value (not stick postion) is <= 1000us (motors are not running...)
+  if( throttle <= 1000 ) {
+
+    // AA
+    // throttle_stick low, yaw low, roll low, pitch low for 5 seconds will put us in ESC calibration mode
+    // disarming motors will take us out of esc calibration mode
+    if( receiver_input_channel_3 < 1050 && receiver_input_channel_4 < 1050 && receiver_input_channel_1 < 1050 && receiver_input_channel_2 < 1050 ) {
+       // enter esc calibration mode
+       // maybe check to see if this state is held for 5 seconds and then go into throttle calibarion mode
+       if( esc_calibration_mode_enter == 0 ) esc_calibration_mode_enter = millis();
+       if( millis() - esc_calibration_mode_enter > 5000 ) { in_esc_calibration_mode = true; }
+       //Serial.println( in_esc_calibration_mode );
+       return; 
+    }
+    // AA
+    
+    //For starting the motors: throttle low and yaw left (step 1).
+    if(receiver_input_channel_3 < 1050 && receiver_input_channel_4 < 1050 ) {
+      start = 1;
+    }
+    
+    //When yaw stick is back in the center position start the motors (step 2).
+    if(start == 1 && receiver_input_channel_3 < 1050 && receiver_input_channel_4 > 1450 ){
+      start = 2;
+      //Reset the pid controllers for a bumpless start.
+      pid_i_mem_roll = 0;
+      pid_last_roll_d_error = 0;
+      pid_i_mem_pitch = 0;
+      pid_last_pitch_d_error = 0;
+      pid_i_mem_yaw = 0;
+      pid_last_yaw_d_error = 0;     
+    }
+    
+    //Stopping the motors: throttle low and yaw right.
+    if(start == 2 && receiver_input_channel_3 < 1050 && receiver_input_channel_4 > 1950) {
+      start = 0;
+      in_esc_calibration_mode = false; // AA .. and end esc calibration_mode (this does not mean we were in esc calibration mode)
+    }
+    
+  } // AA Ends check to only arm/disarm if the throttle_value (not stick position) is <= 1000us (motors are not running...)
+
   
   //The PID set point in degrees per second is determined by the roll receiver input.
   //In the case of deviding by 3 the max roll rate is aprox 164 degrees per second ( (500-8)/3 = 164d/s ).
@@ -195,6 +289,19 @@ void loop(){
     if(receiver_input_channel_4 > 1508)pid_yaw_setpoint = (receiver_input_channel_4 - 1508)/3.0;
     else if(receiver_input_channel_4 < 1492)pid_yaw_setpoint = (receiver_input_channel_4 - 1492)/3.0;
   }
+
+  // AA
+  if( throttle <= 1000 ) {
+      //Reset the pid controllers for a bumpless start.
+      pid_i_mem_roll = 0;
+      pid_last_roll_d_error = 0;
+      pid_i_mem_pitch = 0;
+      pid_last_pitch_d_error = 0;
+      pid_i_mem_yaw = 0;
+      pid_last_yaw_d_error = 0;     
+  }
+  // AA
+  
   //PID inputs are known. So we can calculate the pid output.
   calculate_pid();
   
@@ -205,27 +312,65 @@ void loop(){
   
   //Turn on the led if battery voltage is to low.
   if(battery_voltage < 1030 && battery_voltage > 600)digitalWrite(12, HIGH);
-  
-  throttle = receiver_input_channel_3;                                      //We need the throttle signal as a base signal.
+
+  // AA
+  // Removed (A)
+  // original version throttle is based on TX stick position
+  // throttle = receiver_input_channel_3;                                   //We need the throttle signal as a base signal.
+  // AA
   
   if (start == 2){                                                          //The motors are started.
-    if (throttle > 1800) throttle = 1800;                                   //We need some room to keep full control at full throttle.
-    esc_1 = throttle - pid_output_pitch + pid_output_roll - pid_output_yaw; //Calculate the pulse for esc 1 (front-right - CCW)
-    esc_2 = throttle + pid_output_pitch + pid_output_roll + pid_output_yaw; //Calculate the pulse for esc 2 (rear-right - CW)
-    esc_3 = throttle + pid_output_pitch - pid_output_roll - pid_output_yaw; //Calculate the pulse for esc 3 (rear-left - CCW)
-    esc_4 = throttle - pid_output_pitch - pid_output_roll + pid_output_yaw; //Calculate the pulse for esc 4 (front-left - CW)
 
-    if (battery_voltage < 1240 && battery_voltage > 800){                   //Is the battery connected?
-      esc_1 += esc_1 * ((1240 - battery_voltage)/(float)3500);              //Compensate the esc-1 pulse for voltage drop.
-      esc_2 += esc_2 * ((1240 - battery_voltage)/(float)3500);              //Compensate the esc-2 pulse for voltage drop.
-      esc_3 += esc_3 * ((1240 - battery_voltage)/(float)3500);              //Compensate the esc-3 pulse for voltage drop.
-      esc_4 += esc_4 * ((1240 - battery_voltage)/(float)3500);              //Compensate the esc-4 pulse for voltage drop.
-    } 
-    
-    if (esc_1 < 1100) esc_1 = 1100;                                         //Keep the motors running.
-    if (esc_2 < 1100) esc_2 = 1100;                                         //Keep the motors running.
-    if (esc_3 < 1100) esc_3 = 1100;                                         //Keep the motors running.
-    if (esc_4 < 1100) esc_4 = 1100;                                         //Keep the motors running.
+    ///////////////////////////////////////////////////////////////////////////////////////////
+    // AA
+    // hover mode throttle
+    // Added in place of (A)
+    //
+    // throttle_stick position at 1500 means no change in current thottle
+    // throttle_stick > 1500 means increase the throttle
+    // throttle_stick < 1500 means decrease the throttle
+    // final throttle value is between 1000 and 2000
+         if( receiver_input_channel_3 < 1100  && throttle >= 1400 ) { throttle -=  10;  } // AA fast decrease in throttle
+    else if( receiver_input_channel_3 < 1200  && throttle >= 1010 ) { throttle -=   5;  } // AA medium decrease in throttle
+    else if( receiver_input_channel_3 < 1400  && throttle >= 1001 ) { throttle -=   1;  } // AA slow decrease in throttle   
+    else if( receiver_input_channel_3 > 1600  && throttle <= 1999 ) { throttle +=   1;  } // AA slow increase in throttle
+    else if( receiver_input_channel_3 > 1800  && throttle <= 1990 ) { throttle +=  10;  } // AA medium increase in throttle   
+    else if( receiver_input_channel_3 < 1010                      ) { throttle = 1000;  }    
+    // Serial.println( throttle );
+    // hover mode throttle
+    // AA
+    ///////////////////////////////////////////////////////////////////////////////////////////
+
+    // Serial.println( throttle );
+
+    if( !in_esc_calibration_mode ) {
+      
+      if (throttle > 1800) throttle = 1800;                                   //We need some room to keep full control at full throttle.
+      
+      esc_1 = throttle - pid_output_pitch + pid_output_roll - pid_output_yaw; //Calculate the pulse for esc 1 (front-right - CCW)
+      esc_2 = throttle + pid_output_pitch + pid_output_roll + pid_output_yaw; //Calculate the pulse for esc 2 (rear-right - CW)
+      esc_3 = throttle + pid_output_pitch - pid_output_roll - pid_output_yaw; //Calculate the pulse for esc 3 (rear-left - CCW)
+      esc_4 = throttle - pid_output_pitch - pid_output_roll + pid_output_yaw; //Calculate the pulse for esc 4 (front-left - CW)
+
+      if (battery_voltage < 1240 && battery_voltage > 800){                   //Is the battery connected?
+        esc_1 += esc_1 * ((1240 - battery_voltage)/(float)3500);              //Compensate the esc-1 pulse for voltage drop.
+        esc_2 += esc_2 * ((1240 - battery_voltage)/(float)3500);              //Compensate the esc-2 pulse for voltage drop.
+        esc_3 += esc_3 * ((1240 - battery_voltage)/(float)3500);              //Compensate the esc-3 pulse for voltage drop.
+        esc_4 += esc_4 * ((1240 - battery_voltage)/(float)3500);              //Compensate the esc-4 pulse for voltage drop.
+      } 
+
+      if (esc_1 < 1100) esc_1 = 1100;                                         //Keep the motors running.
+      if (esc_2 < 1100) esc_2 = 1100;                                         //Keep the motors running.
+      if (esc_3 < 1100) esc_3 = 1100;                                         //Keep the motors running.
+      if (esc_4 < 1100) esc_4 = 1100;                                         //Keep the motors running.
+      
+    } else {
+      esc_1 = throttle ;
+      esc_2 = throttle ;
+      esc_3 = throttle ;
+      esc_4 = throttle ;
+      
+    }
     
     if(esc_1 > 2000)esc_1 = 2000;                                           //Limit the esc-1 pulse to 2000us.
     if(esc_2 > 2000)esc_2 = 2000;                                           //Limit the esc-2 pulse to 2000us.
@@ -239,6 +384,9 @@ void loop(){
     esc_3 = 1000;                                                           //If start is not 2 keep a 1000us pulse for ess-3.
     esc_4 = 1000;                                                           //If start is not 2 keep a 1000us pulse for ess-4.
   }
+
+  //AA Debug RX channel inputs
+ Serial.print( throttle ); Serial.print( " " );  Serial.print( esc_1 ); Serial.print( " " ); Serial.print( esc_2 ); Serial.print( " " ); Serial.print( esc_3 ); Serial.print( " " ); Serial.println( esc_4 );  
   
   //All the information for controlling the motor's is available.
   //The refresh rate is 250Hz. That means the esc's need there pulse every 4ms.
@@ -258,11 +406,13 @@ void loop(){
     if(timer_channel_3 <= esc_loop_timer)PORTD &= B10111111;                //Set digital output 6 to low if the time is expired.
     if(timer_channel_4 <= esc_loop_timer)PORTD &= B01111111;                //Set digital output 7 to low if the time is expired.
   }
+  
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //This routine is called every time input 8, 9, 10 or 11 changed state
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/*
 ISR(PCINT0_vect){
   current_time = micros();
   //Channel 1=========================================
@@ -311,6 +461,7 @@ ISR(PCINT0_vect){
     receiver_input[4] = current_time - timer_4;                //Channel 4 is current_time - timer_4
   }
 }
+*/
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //Subroutine for reading the gyro
@@ -415,7 +566,21 @@ int convert_receiver_channel(byte function){
   if(eeprom_data[function + 23] & 0b10000000)reverse = 1;                      //Reverse channel when most significant bit is set
   else reverse = 0;                                                            //If the most significant is not set there is no reverse
   
-  actual = receiver_input[channel];                                            //Read the actual receiver value for the corresponding function
+
+  // Original PWM input
+  // actual = receiver_input[channel];                                          //Read the actual receiver value for the corresponding function
+  
+  // PPM input
+  //while(1) {
+  //  if( ppm_read && ppm_sync ) {
+      cli();  
+        actual = ppm_channels[channel] ;
+      sei();
+  //    break;
+  //  }
+  //}
+  // PPM
+  
   low = (eeprom_data[channel * 2 + 15] << 8) | eeprom_data[channel * 2 + 14];  //Store the low value for the specific receiver input channel
   center = (eeprom_data[channel * 2 - 1] << 8) | eeprom_data[channel * 2 - 2]; //Store the center value for the specific receiver input channel
   high = (eeprom_data[channel * 2 + 7] << 8) | eeprom_data[channel * 2 + 6];   //Store the high value for the specific receiver input channel
@@ -426,7 +591,7 @@ int convert_receiver_channel(byte function){
     if(reverse == 1)return 1500 + difference;                                  //If the channel is reversed
     else return 1500 - difference;                                             //If the channel is not reversed
   }
-  else if(actual > center){                                                                        //The actual receiver value is higher than the center value
+  else if(actual > center){                                                    //The actual receiver value is higher than the center value
     if(actual > high)actual = high;                                            //Limit the lowest value to the value that was detected during setup
     difference = ((long)(actual - center) * (long)500) / (high - center);      //Calculate and scale the actual value to a 1000 - 2000us value
     if(reverse == 1)return 1500 - difference;                                  //If the channel is reversed
