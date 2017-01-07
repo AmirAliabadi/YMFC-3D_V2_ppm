@@ -59,6 +59,11 @@ float pid_i_mem_pitch, pid_pitch_setpoint, gyro_pitch_input, pid_output_pitch, p
 float pid_i_mem_yaw, pid_yaw_setpoint, gyro_yaw_input, pid_output_yaw, pid_last_yaw_d_error;
 
 // AA
+unsigned long esc_calibration_mode_enter = 0 ;
+boolean in_esc_calibration_mode = false;
+// AA
+
+// AA
 ////////////////////////////////////////////////////////
 // PPM Input                                          //
 ////////////////////////////////////////////////////////
@@ -162,8 +167,13 @@ void setup(){
 
   //Wait until the receiver is active and the throtle is set to the lower position.
   while(receiver_input_channel_3 < 990 || receiver_input_channel_3 > 1020 || receiver_input_channel_4 < 1400){
+
+    // AA lets just read all channels even though we are only checking 2 of them
+    receiver_input_channel_1 = convert_receiver_channel(1);    //Convert the actual receiver signals for throttle to the standard 1000 - 2000us
+    receiver_input_channel_2 = convert_receiver_channel(2);    //Convert the actual receiver signals for yaw to the standard 1000 - 2000us    
     receiver_input_channel_3 = convert_receiver_channel(3);    //Convert the actual receiver signals for throttle to the standard 1000 - 2000us
     receiver_input_channel_4 = convert_receiver_channel(4);    //Convert the actual receiver signals for yaw to the standard 1000 - 2000us
+    
     start ++;                                                  //While waiting increment start whith every loop.
     //We don't want the esc's to be beeping annoyingly. So let's give them a 1000us puls while waiting for the receiver inputs.
     PORTD |= B11110000;                                        //Set digital poort 4, 5, 6 and 7 high.
@@ -174,6 +184,10 @@ void setup(){
       digitalWrite(12, !digitalRead(12));                      //Change the led status.
       start = 0;                                               //Start again at 0.
     }
+    
+    //AA Debug RX channel inputs
+    //Serial.print( receiver_input_channel_1 ); Serial.print( " " ); Serial.print( receiver_input_channel_2 ); Serial.print( " " ); Serial.print( receiver_input_channel_3 ); Serial.print( " " ); Serial.println( receiver_input_channel_4 );
+    
   }
   start = 0;                                                   //Set start back to 0.
   
@@ -198,11 +212,9 @@ void loop(){
   receiver_input_channel_3 = convert_receiver_channel(3);      //Convert the actual receiver signals for throttle to the standard 1000 - 2000us.
   receiver_input_channel_4 = convert_receiver_channel(4);      //Convert the actual receiver signals for yaw to the standard 1000 - 2000us.
 
-/*
- * AA Debug RX channel inputs
-  Serial.print( receiver_input_channel_1 ); Serial.print( " " ); Serial.print( receiver_input_channel_2 ); Serial.print( " " ); Serial.print( receiver_input_channel_3 ); Serial.print( " " ); Serial.println( receiver_input_channel_4 );
- * AA
-*/  
+
+  //AA Debug RX channel inputs
+  //Serial.print( receiver_input_channel_1 ); Serial.print( " " ); Serial.print( receiver_input_channel_2 ); Serial.print( " " ); Serial.print( receiver_input_channel_3 ); Serial.print( " " ); Serial.println( receiver_input_channel_4 );
   
   //Let's get the current gyro data and scale it to degrees per second for the pid calculations.
   gyro_signalen();
@@ -216,20 +228,22 @@ void loop(){
   // AA only arm/disarm if throttle_value (not stick postion) is <= 1000us (motors are not running...)
   if( throttle <= 1000 ) {
 
-    if( receiver_input_channel_3 > 1900 && receiver_input_channel_4 > 1900 && receiver_input_channel_1 < 1090 && receiver_input_channel_2 < 1090 ) {
-      // enter esc calibration mode
-      // maybe check to see if this state is held for 5 seconds and then go into throttle calibarion mode
-      // if( esc_calibration_mode_enter == 0 ) esc_calibration_mode_enter = millis();
-      // if( millis() - esc_calibration_mode_enter > 5000 ) { in_esc_calibration_mode = 1 ; }
-      //
-      // return; 
+    // AA
+    // throttle_stick low, yaw low, roll low, pitch low for 5 seconds will put us in ESC calibration mode
+    // disarming motors will take us out of esc calibration mode
+    if( receiver_input_channel_3 < 1050 && receiver_input_channel_4 < 1050 && receiver_input_channel_1 < 1050 && receiver_input_channel_2 < 1050 ) {
+       // enter esc calibration mode
+       // maybe check to see if this state is held for 5 seconds and then go into throttle calibarion mode
+       if( esc_calibration_mode_enter == 0 ) esc_calibration_mode_enter = millis();
+       if( millis() - esc_calibration_mode_enter > 5000 ) { in_esc_calibration_mode = true; }
+       //Serial.println( in_esc_calibration_mode );
+       return; 
     }
+    // AA
     
     //For starting the motors: throttle low and yaw left (step 1).
     if(receiver_input_channel_3 < 1050 && receiver_input_channel_4 < 1050 ) {
       start = 1;
-  
-      throttle = 1000; // AA for center stick TX setup    
     }
     
     //When yaw stick is back in the center position start the motors (step 2).
@@ -241,17 +255,15 @@ void loop(){
       pid_i_mem_pitch = 0;
       pid_last_pitch_d_error = 0;
       pid_i_mem_yaw = 0;
-      pid_last_yaw_d_error = 0;
-  
-      throttle = 1000; // AA for center stick TX setup        
+      pid_last_yaw_d_error = 0;     
     }
     
     //Stopping the motors: throttle low and yaw right.
     if(start == 2 && receiver_input_channel_3 < 1050 && receiver_input_channel_4 > 1950) {
       start = 0;
-  
-      throttle = 1000; // AA for center stick TX setup    
+      in_esc_calibration_mode = false; // AA .. and end esc calibration_mode (this does not mean we were in esc calibration mode)
     }
+    
   } // AA Ends check to only arm/disarm if the throttle_value (not stick position) is <= 1000us (motors are not running...)
 
   
@@ -277,6 +289,18 @@ void loop(){
     if(receiver_input_channel_4 > 1508)pid_yaw_setpoint = (receiver_input_channel_4 - 1508)/3.0;
     else if(receiver_input_channel_4 < 1492)pid_yaw_setpoint = (receiver_input_channel_4 - 1492)/3.0;
   }
+
+  // AA
+  if( throttle <= 1000 ) {
+      //Reset the pid controllers for a bumpless start.
+      pid_i_mem_roll = 0;
+      pid_last_roll_d_error = 0;
+      pid_i_mem_pitch = 0;
+      pid_last_pitch_d_error = 0;
+      pid_i_mem_yaw = 0;
+      pid_last_yaw_d_error = 0;     
+  }
+  // AA
   
   //PID inputs are known. So we can calculate the pid output.
   calculate_pid();
@@ -306,36 +330,47 @@ void loop(){
     // throttle_stick > 1500 means increase the throttle
     // throttle_stick < 1500 means decrease the throttle
     // final throttle value is between 1000 and 2000
-         if( receiver_input_channel_3 < 1050  && throttle > 1400 ) { throttle -= 50; } // AA fast decrease in throttle
-    else if( receiver_input_channel_3 < 1200  && throttle > 1010 ) { throttle -= 10; } // AA medium decrease in throttle
-    else if( receiver_input_channel_3 < 1400  && throttle > 1001 ) { throttle -= 1;  } // AA slow decrease in throttle   
-    else if( receiver_input_channel_3 > 1600  && throttle < 1999 ) { throttle += 1;  } // AA slow increase in throttle
-    else if( receiver_input_channel_3 > 1800  && throttle < 1990 ) { throttle += 10; } // AA medium increase in throttle   
-    else if( receiver_input_channel_3 < 1400 ) { throttle = 1000;  }    
+         if( receiver_input_channel_3 < 1100  && throttle >= 1400 ) { throttle -=  10;  } // AA fast decrease in throttle
+    else if( receiver_input_channel_3 < 1200  && throttle >= 1010 ) { throttle -=   5;  } // AA medium decrease in throttle
+    else if( receiver_input_channel_3 < 1400  && throttle >= 1001 ) { throttle -=   1;  } // AA slow decrease in throttle   
+    else if( receiver_input_channel_3 > 1600  && throttle <= 1999 ) { throttle +=   1;  } // AA slow increase in throttle
+    else if( receiver_input_channel_3 > 1800  && throttle <= 1990 ) { throttle +=  10;  } // AA medium increase in throttle   
+    else if( receiver_input_channel_3 < 1010                      ) { throttle = 1000;  }    
     // Serial.println( throttle );
     // hover mode throttle
     // AA
     ///////////////////////////////////////////////////////////////////////////////////////////
 
-    // if( !in_esc_calibration_mode )
-    if (throttle > 1800) throttle = 1800;                                   //We need some room to keep full control at full throttle.
-    
-    esc_1 = throttle - pid_output_pitch + pid_output_roll - pid_output_yaw; //Calculate the pulse for esc 1 (front-right - CCW)
-    esc_2 = throttle + pid_output_pitch + pid_output_roll + pid_output_yaw; //Calculate the pulse for esc 2 (rear-right - CW)
-    esc_3 = throttle + pid_output_pitch - pid_output_roll - pid_output_yaw; //Calculate the pulse for esc 3 (rear-left - CCW)
-    esc_4 = throttle - pid_output_pitch - pid_output_roll + pid_output_yaw; //Calculate the pulse for esc 4 (front-left - CW)
+    // Serial.println( throttle );
 
-    if (battery_voltage < 1240 && battery_voltage > 800){                   //Is the battery connected?
-      esc_1 += esc_1 * ((1240 - battery_voltage)/(float)3500);              //Compensate the esc-1 pulse for voltage drop.
-      esc_2 += esc_2 * ((1240 - battery_voltage)/(float)3500);              //Compensate the esc-2 pulse for voltage drop.
-      esc_3 += esc_3 * ((1240 - battery_voltage)/(float)3500);              //Compensate the esc-3 pulse for voltage drop.
-      esc_4 += esc_4 * ((1240 - battery_voltage)/(float)3500);              //Compensate the esc-4 pulse for voltage drop.
-    } 
-    
-    if (esc_1 < 1100) esc_1 = 1100;                                         //Keep the motors running.
-    if (esc_2 < 1100) esc_2 = 1100;                                         //Keep the motors running.
-    if (esc_3 < 1100) esc_3 = 1100;                                         //Keep the motors running.
-    if (esc_4 < 1100) esc_4 = 1100;                                         //Keep the motors running.
+    if( !in_esc_calibration_mode ) {
+      
+      if (throttle > 1800) throttle = 1800;                                   //We need some room to keep full control at full throttle.
+      
+      esc_1 = throttle - pid_output_pitch + pid_output_roll - pid_output_yaw; //Calculate the pulse for esc 1 (front-right - CCW)
+      esc_2 = throttle + pid_output_pitch + pid_output_roll + pid_output_yaw; //Calculate the pulse for esc 2 (rear-right - CW)
+      esc_3 = throttle + pid_output_pitch - pid_output_roll - pid_output_yaw; //Calculate the pulse for esc 3 (rear-left - CCW)
+      esc_4 = throttle - pid_output_pitch - pid_output_roll + pid_output_yaw; //Calculate the pulse for esc 4 (front-left - CW)
+
+      if (battery_voltage < 1240 && battery_voltage > 800){                   //Is the battery connected?
+        esc_1 += esc_1 * ((1240 - battery_voltage)/(float)3500);              //Compensate the esc-1 pulse for voltage drop.
+        esc_2 += esc_2 * ((1240 - battery_voltage)/(float)3500);              //Compensate the esc-2 pulse for voltage drop.
+        esc_3 += esc_3 * ((1240 - battery_voltage)/(float)3500);              //Compensate the esc-3 pulse for voltage drop.
+        esc_4 += esc_4 * ((1240 - battery_voltage)/(float)3500);              //Compensate the esc-4 pulse for voltage drop.
+      } 
+
+      if (esc_1 < 1100) esc_1 = 1100;                                         //Keep the motors running.
+      if (esc_2 < 1100) esc_2 = 1100;                                         //Keep the motors running.
+      if (esc_3 < 1100) esc_3 = 1100;                                         //Keep the motors running.
+      if (esc_4 < 1100) esc_4 = 1100;                                         //Keep the motors running.
+      
+    } else {
+      esc_1 = throttle ;
+      esc_2 = throttle ;
+      esc_3 = throttle ;
+      esc_4 = throttle ;
+      
+    }
     
     if(esc_1 > 2000)esc_1 = 2000;                                           //Limit the esc-1 pulse to 2000us.
     if(esc_2 > 2000)esc_2 = 2000;                                           //Limit the esc-2 pulse to 2000us.
@@ -349,6 +384,9 @@ void loop(){
     esc_3 = 1000;                                                           //If start is not 2 keep a 1000us pulse for ess-3.
     esc_4 = 1000;                                                           //If start is not 2 keep a 1000us pulse for ess-4.
   }
+
+  //AA Debug RX channel inputs
+ Serial.print( throttle ); Serial.print( " " );  Serial.print( esc_1 ); Serial.print( " " ); Serial.print( esc_2 ); Serial.print( " " ); Serial.print( esc_3 ); Serial.print( " " ); Serial.println( esc_4 );  
   
   //All the information for controlling the motor's is available.
   //The refresh rate is 250Hz. That means the esc's need there pulse every 4ms.
@@ -368,6 +406,7 @@ void loop(){
     if(timer_channel_3 <= esc_loop_timer)PORTD &= B10111111;                //Set digital output 6 to low if the time is expired.
     if(timer_channel_4 <= esc_loop_timer)PORTD &= B01111111;                //Set digital output 7 to low if the time is expired.
   }
+  
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
