@@ -39,17 +39,17 @@ int pid_max_yaw = 400;                     //Maximum output of the PID-controlle
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //Declaring global variables
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-byte last_channel_1, last_channel_2, last_channel_3, last_channel_4;
+//AA PWM byte last_channel_1, last_channel_2, last_channel_3, last_channel_4;
+//AA ?? int counter_channel_1, counter_channel_2, counter_channel_3, counter_channel_4, loop_counter;
+//AA PWM input unsigned long timer_1, timer_2, timer_3, timer_4, current_time;
+//AA PWM int receiver_input[5];
 byte eeprom_data[36];
 byte highByte, lowByte;
 int receiver_input_channel_1, receiver_input_channel_2, receiver_input_channel_3, receiver_input_channel_4;
-int counter_channel_1, counter_channel_2, counter_channel_3, counter_channel_4, loop_counter;
 int esc_1, esc_2, esc_3, esc_4;
 int throttle, battery_voltage;
 int cal_int, start, gyro_address;
-int receiver_input[5];
 volatile unsigned long timer_channel_1, timer_channel_2, timer_channel_3, timer_channel_4, esc_timer, esc_loop_timer;
-unsigned long timer_1, timer_2, timer_3, timer_4, current_time;
 unsigned long loop_timer;
 double gyro_pitch, gyro_roll, gyro_yaw;
 double gyro_axis[4], gyro_axis_cal[4];
@@ -63,9 +63,8 @@ unsigned long esc_calibration_mode_enter = 0 ;
 boolean in_esc_calibration_mode = false;
 // AA
 
-// AA
 ////////////////////////////////////////////////////////
-// PPM Input                                          //
+// AA Input                                           //
 ////////////////////////////////////////////////////////
 volatile unsigned long last_ppm_clock = 99999;
 volatile unsigned long current_ppm_clock = 0;
@@ -98,9 +97,8 @@ void ppmRising() {
   ppm_read = true;
 }
 ///////////////////////////////////////////////////
-// PPM Input                                     //
+// AA PPM Input                                  //
 ///////////////////////////////////////////////////
-// AA
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //Setup routine
@@ -161,9 +159,7 @@ void setup(){
 //  PCMSK0 |= (1 << PCINT3);                                     //Set PCINT3 (digital input 11)to trigger an interrupt on state change.
 // AA
 
-// AA PPM input setup
-  attachInterrupt(digitalPinToInterrupt(3), ppmRising, RISING);  
-// AA PPM   
+  attachInterrupt(digitalPinToInterrupt(3), ppmRising, RISING);  // AA PPM input setup
 
   //Wait until the receiver is active and the throtle is set to the lower position.
   while(receiver_input_channel_3 < 990 || receiver_input_channel_3 > 1020 || receiver_input_channel_4 < 1400){
@@ -173,6 +169,9 @@ void setup(){
     receiver_input_channel_2 = convert_receiver_channel(2);    //Convert the actual receiver signals for yaw to the standard 1000 - 2000us    
     receiver_input_channel_3 = convert_receiver_channel(3);    //Convert the actual receiver signals for throttle to the standard 1000 - 2000us
     receiver_input_channel_4 = convert_receiver_channel(4);    //Convert the actual receiver signals for yaw to the standard 1000 - 2000us
+
+    //AA Debug RX channel inputs
+    //Serial.print( receiver_input_channel_1 ); Serial.print( " " ); Serial.print( receiver_input_channel_2 ); Serial.print( " " ); Serial.print( receiver_input_channel_3 ); Serial.print( " " ); Serial.println( receiver_input_channel_4 );
     
     start ++;                                                  //While waiting increment start whith every loop.
     //We don't want the esc's to be beeping annoyingly. So let's give them a 1000us puls while waiting for the receiver inputs.
@@ -184,9 +183,6 @@ void setup(){
       digitalWrite(12, !digitalRead(12));                      //Change the led status.
       start = 0;                                               //Start again at 0.
     }
-    
-    //AA Debug RX channel inputs
-    //Serial.print( receiver_input_channel_1 ); Serial.print( " " ); Serial.print( receiver_input_channel_2 ); Serial.print( " " ); Serial.print( receiver_input_channel_3 ); Serial.print( " " ); Serial.println( receiver_input_channel_4 );
     
   }
   start = 0;                                                   //Set start back to 0.
@@ -212,7 +208,6 @@ void loop(){
   receiver_input_channel_3 = convert_receiver_channel(3);      //Convert the actual receiver signals for throttle to the standard 1000 - 2000us.
   receiver_input_channel_4 = convert_receiver_channel(4);      //Convert the actual receiver signals for yaw to the standard 1000 - 2000us.
 
-
   //AA Debug RX channel inputs
   //Serial.print( receiver_input_channel_1 ); Serial.print( " " ); Serial.print( receiver_input_channel_2 ); Serial.print( " " ); Serial.print( receiver_input_channel_3 ); Serial.print( " " ); Serial.println( receiver_input_channel_4 );
   
@@ -232,11 +227,9 @@ void loop(){
     // throttle_stick low, yaw low, roll low, pitch low for 5 seconds will put us in ESC calibration mode
     // disarming motors will take us out of esc calibration mode
     if( receiver_input_channel_3 < 1050 && receiver_input_channel_4 < 1050 && receiver_input_channel_1 < 1050 && receiver_input_channel_2 < 1050 ) {
-       // enter esc calibration mode
-       // maybe check to see if this state is held for 5 seconds and then go into throttle calibarion mode
+       // AA check to see if this state is held for 5 seconds and then go into throttle calibarion mode
        if( esc_calibration_mode_enter == 0 ) esc_calibration_mode_enter = millis();
        if( millis() - esc_calibration_mode_enter > 5000 ) { in_esc_calibration_mode = true; }
-       //Serial.println( in_esc_calibration_mode );
        return; 
     }
     // AA
@@ -261,7 +254,7 @@ void loop(){
     //Stopping the motors: throttle low and yaw right.
     if(start == 2 && receiver_input_channel_3 < 1050 && receiver_input_channel_4 > 1950) {
       start = 0;
-      in_esc_calibration_mode = false; // AA .. and end esc calibration_mode (this does not mean we were in esc calibration mode)
+      in_esc_calibration_mode = false; // AA always exit ESC calibration mode when disarming motors
     }
     
   } // AA Ends check to only arm/disarm if the throttle_value (not stick position) is <= 1000us (motors are not running...)
@@ -365,6 +358,7 @@ void loop(){
       if (esc_4 < 1100) esc_4 = 1100;                                         //Keep the motors running.
       
     } else {
+      // AA ESC Calibration mode,  Equal outputs to all motors
       esc_1 = throttle ;
       esc_2 = throttle ;
       esc_3 = throttle ;
@@ -383,11 +377,12 @@ void loop(){
     esc_2 = 1000;                                                           //If start is not 2 keep a 1000us pulse for ess-2.
     esc_3 = 1000;                                                           //If start is not 2 keep a 1000us pulse for ess-3.
     esc_4 = 1000;                                                           //If start is not 2 keep a 1000us pulse for ess-4.
+    
   }
 
   //AA Debug RX channel inputs
- Serial.print( throttle ); Serial.print( " " );  Serial.print( esc_1 ); Serial.print( " " ); Serial.print( esc_2 ); Serial.print( " " ); Serial.print( esc_3 ); Serial.print( " " ); Serial.println( esc_4 );  
-  
+  //AA Serial.print( throttle ); Serial.print( " " );  Serial.print( esc_1 ); Serial.print( " " ); Serial.print( esc_2 ); Serial.print( " " ); Serial.print( esc_3 ); Serial.print( " " ); Serial.println( esc_4 );  
+
   //All the information for controlling the motor's is available.
   //The refresh rate is 250Hz. That means the esc's need there pulse every 4ms.
   while(micros() - loop_timer < 4000);                                      //We wait until 4000us are passed.
@@ -566,20 +561,12 @@ int convert_receiver_channel(byte function){
   if(eeprom_data[function + 23] & 0b10000000)reverse = 1;                      //Reverse channel when most significant bit is set
   else reverse = 0;                                                            //If the most significant is not set there is no reverse
   
-
   // Original PWM input
   // actual = receiver_input[channel];                                          //Read the actual receiver value for the corresponding function
-  
-  // PPM input
-  //while(1) {
-  //  if( ppm_read && ppm_sync ) {
-      cli();  
-        actual = ppm_channels[channel] ;
-      sei();
-  //    break;
-  //  }
-  //}
-  // PPM
+  // AA read from the PPM channel
+  cli();  
+    actual = ppm_channels[channel] ;
+  sei();
   
   low = (eeprom_data[channel * 2 + 15] << 8) | eeprom_data[channel * 2 + 14];  //Store the low value for the specific receiver input channel
   center = (eeprom_data[channel * 2 - 1] << 8) | eeprom_data[channel * 2 - 2]; //Store the center value for the specific receiver input channel
