@@ -39,10 +39,6 @@ int pid_max_yaw = 400;                     //Maximum output of the PID-controlle
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //Declaring global variables
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-//AA PWM byte last_channel_1, last_channel_2, last_channel_3, last_channel_4;
-//AA ?? int counter_channel_1, counter_channel_2, counter_channel_3, counter_channel_4, loop_counter;
-//AA PWM input unsigned long timer_1, timer_2, timer_3, timer_4, current_time;
-//AA PWM int receiver_input[5];
 byte eeprom_data[36];
 byte highByte, lowByte;
 int receiver_input_channel_1, receiver_input_channel_2, receiver_input_channel_3, receiver_input_channel_4;
@@ -69,32 +65,27 @@ boolean in_esc_calibration_mode = false;
 volatile unsigned long last_ppm_clock = 99999;
 volatile unsigned long current_ppm_clock = 0;
 volatile unsigned long ppm_dt = 0;
-volatile boolean ppm_read = true;
 volatile boolean ppm_sync = false;
 volatile unsigned short ppm_current_channel = 99;
 volatile unsigned long ppm_channels[11] = {0,0,0,0,0,0,0,0,0,0,0}; // at most 10 channels (sync chaneel + 10 = 11)
 #define NUMBER_OF_PPM_CHANNELS 4
 
 void ppmRising() {
-  ppm_read = false;
-    {
-      current_ppm_clock = micros();
-      ppm_dt = current_ppm_clock - last_ppm_clock;
-      if( ppm_dt >= 3500 ) {
-        ppm_sync = true;
-        ppm_current_channel = 0;
-        ppm_channels[ppm_current_channel] = ppm_dt;         
-      }
-      else {
-        if( ppm_sync ) {
-          ppm_current_channel++;
-          if( ppm_current_channel > NUMBER_OF_PPM_CHANNELS ) ppm_sync = false;
-          else ppm_channels[ppm_current_channel] = ppm_dt; 
-        }
-      }
-      last_ppm_clock = current_ppm_clock;   
+  current_ppm_clock = micros();
+  ppm_dt = current_ppm_clock - last_ppm_clock;
+  if( ppm_dt >= 3500 ) {
+    ppm_sync = true;
+    ppm_current_channel = 0;
+    ppm_channels[ppm_current_channel] = ppm_dt;         
+  }
+  else {
+    if( ppm_sync ) {
+      ppm_current_channel++;
+      if( ppm_current_channel > NUMBER_OF_PPM_CHANNELS ) ppm_sync = false;
+      else ppm_channels[ppm_current_channel] = ppm_dt; 
     }
-  ppm_read = true;
+  }
+  last_ppm_clock = current_ppm_clock;   
 }
 ///////////////////////////////////////////////////
 // AA PPM Input                                  //
@@ -149,15 +140,6 @@ void setup(){
   gyro_axis_cal[1] /= 2000;                                    //Divide the roll total by 2000.
   gyro_axis_cal[2] /= 2000;                                    //Divide the pitch total by 2000.
   gyro_axis_cal[3] /= 2000;                                    //Divide the yaw total by 2000.
-
-// AA removing the pin change interrupt being used for PWM input
-// Original PWM input setup 
-//  PCICR |= (1 << PCIE0);                                       //Set PCIE0 to enable PCMSK0 scan.
-//  PCMSK0 |= (1 << PCINT0);                                     //Set PCINT0 (digital input 8) to trigger an interrupt on state change.
-//  PCMSK0 |= (1 << PCINT1);                                     //Set PCINT1 (digital input 9)to trigger an interrupt on state change.
-//  PCMSK0 |= (1 << PCINT2);                                     //Set PCINT2 (digital input 10)to trigger an interrupt on state change.
-//  PCMSK0 |= (1 << PCINT3);                                     //Set PCINT3 (digital input 11)to trigger an interrupt on state change.
-// AA
 
   attachInterrupt(digitalPinToInterrupt(3), ppmRising, RISING);  // AA PPM input setup
 
@@ -306,12 +288,6 @@ void loop(){
   //Turn on the led if battery voltage is to low.
   if(battery_voltage < 1030 && battery_voltage > 600)digitalWrite(12, HIGH);
 
-  // AA
-  // Removed (A)
-  // original version throttle is based on TX stick position
-  // throttle = receiver_input_channel_3;                                   //We need the throttle signal as a base signal.
-  // AA
-  
   if (start == 2){                                                          //The motors are started.
 
     ///////////////////////////////////////////////////////////////////////////////////////////
@@ -323,18 +299,18 @@ void loop(){
     // throttle_stick > 1500 means increase the throttle
     // throttle_stick < 1500 means decrease the throttle
     // final throttle value is between 1000 and 2000
+    //
          if( receiver_input_channel_3 < 1100  && throttle >= 1400 ) { throttle -=  10;  } // AA fast decrease in throttle
     else if( receiver_input_channel_3 < 1200  && throttle >= 1010 ) { throttle -=   5;  } // AA medium decrease in throttle
     else if( receiver_input_channel_3 < 1400  && throttle >= 1001 ) { throttle -=   1;  } // AA slow decrease in throttle   
     else if( receiver_input_channel_3 > 1600  && throttle <= 1999 ) { throttle +=   1;  } // AA slow increase in throttle
     else if( receiver_input_channel_3 > 1800  && throttle <= 1990 ) { throttle +=  10;  } // AA medium increase in throttle   
     else if( receiver_input_channel_3 < 1010                      ) { throttle = 1000;  }    
+    //
     // Serial.println( throttle );
     // hover mode throttle
     // AA
     ///////////////////////////////////////////////////////////////////////////////////////////
-
-    // Serial.println( throttle );
 
     if( !in_esc_calibration_mode ) {
       
@@ -403,60 +379,6 @@ void loop(){
   }
   
 }
-
-///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-//This routine is called every time input 8, 9, 10 or 11 changed state
-///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-/*
-ISR(PCINT0_vect){
-  current_time = micros();
-  //Channel 1=========================================
-  if(PINB & B00000001){                                        //Is input 8 high?
-    if(last_channel_1 == 0){                                   //Input 8 changed from 0 to 1
-      last_channel_1 = 1;                                      //Remember current input state
-      timer_1 = current_time;                                  //Set timer_1 to current_time
-    }
-  }
-  else if(last_channel_1 == 1){                                //Input 8 is not high and changed from 1 to 0
-    last_channel_1 = 0;                                        //Remember current input state
-    receiver_input[1] = current_time - timer_1;                //Channel 1 is current_time - timer_1
-  }
-  //Channel 2=========================================
-  if(PINB & B00000010 ){                                       //Is input 9 high?
-    if(last_channel_2 == 0){                                   //Input 9 changed from 0 to 1
-      last_channel_2 = 1;                                      //Remember current input state
-      timer_2 = current_time;                                  //Set timer_2 to current_time
-    }
-  }
-  else if(last_channel_2 == 1){                                //Input 9 is not high and changed from 1 to 0
-    last_channel_2 = 0;                                        //Remember current input state
-    receiver_input[2] = current_time - timer_2;                //Channel 2 is current_time - timer_2
-  }
-  //Channel 3=========================================
-  if(PINB & B00000100 ){                                       //Is input 10 high?
-    if(last_channel_3 == 0){                                   //Input 10 changed from 0 to 1
-      last_channel_3 = 1;                                      //Remember current input state
-      timer_3 = current_time;                                  //Set timer_3 to current_time
-    }
-  }
-  else if(last_channel_3 == 1){                                //Input 10 is not high and changed from 1 to 0
-    last_channel_3 = 0;                                        //Remember current input state
-    receiver_input[3] = current_time - timer_3;                //Channel 3 is current_time - timer_3
-
-  }
-  //Channel 4=========================================
-  if(PINB & B00001000 ){                                       //Is input 11 high?
-    if(last_channel_4 == 0){                                   //Input 11 changed from 0 to 1
-      last_channel_4 = 1;                                      //Remember current input state
-      timer_4 = current_time;                                  //Set timer_4 to current_time
-    }
-  }
-  else if(last_channel_4 == 1){                                //Input 11 is not high and changed from 1 to 0
-    last_channel_4 = 0;                                        //Remember current input state
-    receiver_input[4] = current_time - timer_4;                //Channel 4 is current_time - timer_4
-  }
-}
-*/
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //Subroutine for reading the gyro
@@ -561,8 +483,6 @@ int convert_receiver_channel(byte function){
   if(eeprom_data[function + 23] & 0b10000000)reverse = 1;                      //Reverse channel when most significant bit is set
   else reverse = 0;                                                            //If the most significant is not set there is no reverse
   
-  // Original PWM input
-  // actual = receiver_input[channel];                                          //Read the actual receiver value for the corresponding function
   // AA read from the PPM channel
   cli();  
     actual = ppm_channels[channel] ;
