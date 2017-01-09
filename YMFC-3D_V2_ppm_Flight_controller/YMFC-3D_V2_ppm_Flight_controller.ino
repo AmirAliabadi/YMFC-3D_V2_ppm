@@ -162,7 +162,7 @@ void setup(){
     PORTD &= B00001111;                                        //Set digital poort 4, 5, 6 and 7 low.
     delay(3);                                                  //Wait 3 milliseconds before the next loop.
     if(start == 125){                                          //Every 125 loops (500ms).
-      digitalWrite(12, !digitalRead(12));                      //Change the led status.
+      digitalWrite(13, !digitalRead(13));                      //Change the led status.
       start = 0;                                               //Start again at 0.
     }
     
@@ -347,7 +347,7 @@ void loop(){
     if(esc_3 > 2000)esc_3 = 2000;                                           //Limit the esc-3 pulse to 2000us.
     if(esc_4 > 2000)esc_4 = 2000;                                           //Limit the esc-4 pulse to 2000us.  
   }
-  
+ 
   else{
     esc_1 = 1000;                                                           //If start is not 2 keep a 1000us pulse for ess-1.
     esc_2 = 1000;                                                           //If start is not 2 keep a 1000us pulse for ess-2.
