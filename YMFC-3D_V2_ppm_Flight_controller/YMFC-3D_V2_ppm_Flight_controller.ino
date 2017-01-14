@@ -96,7 +96,7 @@ void ppmRising() {
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 void setup(){
  
-  Serial.begin(57600);
+  // Serial.begin(57600);
   
   //Read EEPROM for fast access data.
   for(start = 0; start <= 35; start++)eeprom_data[start] = EEPROM.read(start);
@@ -109,7 +109,7 @@ void setup(){
   DDRB |= B00110000;                                           //Configure digital poort 12 and 13 as output.
     
   //Use the led on the Arduino for startup indication.
-  digitalWrite(12,HIGH);                                       //Turn on the warning led.
+  digitalWrite(13,HIGH);                                       //Turn on the warning led.
   
   //Check the EEPROM signature to make sure that the setup program is executed
   while(eeprom_data[33] != 'J' || eeprom_data[34] != 'M' || eeprom_data[35] != 'B')delay(10);
@@ -125,7 +125,7 @@ void setup(){
 
   //Let's take multiple gyro data samples so we can determine the average gyro offset (calibration).
   for (cal_int = 0; cal_int < 2000 ; cal_int ++){              //Take 2000 readings for calibration.
-    if(cal_int % 15 == 0)digitalWrite(12, !digitalRead(12));   //Change the led status to indicate calibration.
+    if(cal_int % 15 == 0)digitalWrite(13, !digitalRead(13));   //Change the led status to indicate calibration.
     gyro_signalen();                                           //Read the gyro output.
     gyro_axis_cal[1] += gyro_axis[1];                          //Ad roll value to gyro_roll_cal.
     gyro_axis_cal[2] += gyro_axis[2];                          //Ad pitch value to gyro_pitch_cal.
@@ -178,7 +178,7 @@ void setup(){
   battery_voltage = (analogRead(0) + 65) * 1.2317;
   
   //When everything is done, turn off the led.
-  digitalWrite(12,LOW);                                        //Turn off the warning led.
+  digitalWrite(13,LOW);                                        //Turn off the warning led.
 }
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //Main program loop
@@ -286,7 +286,7 @@ void loop(){
   battery_voltage = battery_voltage * 0.92 + (analogRead(0) + 65) * 0.09853;
   
   //Turn on the led if battery voltage is to low.
-  if(battery_voltage < 1030 && battery_voltage > 600)digitalWrite(12, HIGH);
+  if(battery_voltage < 1030 && battery_voltage > 600)digitalWrite(13, HIGH);
 
   if (start == 2){                                                          //The motors are started.
 
@@ -435,6 +435,7 @@ void gyro_signalen(){
 //www.youtube.com/watch?v=JBvnB0279-Q
 
 void calculate_pid(){
+
   //Roll calculations
   pid_error_temp = gyro_roll_input - pid_roll_setpoint;
   pid_i_mem_roll += pid_i_gain_roll * pid_error_temp;
@@ -446,7 +447,7 @@ void calculate_pid(){
   else if(pid_output_roll < pid_max_roll * -1)pid_output_roll = pid_max_roll * -1;
   
   pid_last_roll_d_error = pid_error_temp;
-  
+
   //Pitch calculations
   pid_error_temp = gyro_pitch_input - pid_pitch_setpoint;
   pid_i_mem_pitch += pid_i_gain_pitch * pid_error_temp;
@@ -527,7 +528,7 @@ void set_gyro_registers(){
     Wire.requestFrom(gyro_address, 1);                           //Request 1 bytes from the gyro
     while(Wire.available() < 1);                                 //Wait until the 6 bytes are received
     if(Wire.read() != 0x08){                                     //Check if the value is 0x08
-      digitalWrite(12,HIGH);                                     //Turn on the warning led
+      digitalWrite(13,HIGH);                                     //Turn on the warning led
       while(1)delay(10);                                         //Stay in this loop for ever
     }
     
@@ -555,7 +556,7 @@ void set_gyro_registers(){
     Wire.requestFrom(gyro_address, 1);                           //Request 1 bytes from the gyro
     while(Wire.available() < 1);                                 //Wait until the 6 bytes are received
     if(Wire.read() != 0x90){                                     //Check if the value is 0x90
-      digitalWrite(12,HIGH);                                     //Turn on the warning led
+      digitalWrite(13,HIGH);                                     //Turn on the warning led
       while(1)delay(10);                                         //Stay in this loop for ever
     }
 
@@ -579,7 +580,7 @@ void set_gyro_registers(){
     Wire.requestFrom(gyro_address, 1);                           //Request 1 bytes from the gyro
     while(Wire.available() < 1);                                 //Wait until the 6 bytes are received
     if(Wire.read() != 0x90){                                     //Check if the value is 0x90
-      digitalWrite(12,HIGH);                                     //Turn on the warning led
+      digitalWrite(13,HIGH);                                     //Turn on the warning led
       while(1)delay(10);                                         //Stay in this loop for ever
     }
   }
